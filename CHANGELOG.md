@@ -1,9 +1,55 @@
 # Changelog
 
-All notable changes to this project are documented in this changelog.  
+All notable changes to this project are documented in this changelog.
 This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+## [3.0.0] - 2026-04-19
+
+Fork: [lamchau/Menu-Bar-Search](https://github.com/lamchau/Menu-Bar-Search)
+
+> **Note:** v2.0 was used by [BenziAhamed](https://github.com/BenziAhamed/Menu-Bar-Search)
+> in 2023 for the notarized release. This fork skips to v3.0.0 to avoid confusion.
+
+### Added
+- App runtime detection (native vs Electron) with per-runtime dispatch strategies
+- Electron app support: keyboard shortcut dispatch and osascript AXPress-open-then-press
+- PID tracking in Alfred arg to prevent wrong-app clicks after focus change
+- AppleScript string escaping to prevent injection via menu item names
+- 2-second timeout on app activation spin-wait
+- 48 unit tests covering core logic
+- Library/CLI target split for testability (`MenuBarLib` + `menu`)
+
+### Changed
+- Search keyword default from `mu` to `m`
+- macOS deployment target from 10.15 to 12 (matches Alfred 5 requirement)
+- Replaced protobuf with plain `Codable`/`Sendable` structs (-575 lines)
+- Settings file format from protobuf text to JSON
+- Cache serialization from protobuf binary to JSON
+- `RuntimeArgs` from mutable class to `Sendable` struct
+- Force casts on `CFNumber`/`AXUIElement` to `unsafeDowncast`
+- Force unwraps `path.last!`/`path[0]` to safe access
+
+### Fixed
+- `valid` field defaulted to `false` (protobuf); now defaults to `true` (Alfred convention)
+- Electron apps (Slack, VS Code) silently ignoring `AXPress` on menu items
+- Infinite spin-wait when target app fails to activate
+- Dead cache expiry branch (condition was always true)
+
+### Removed
+- `swift-protobuf` dependency and generated code (`MenuItem.pb.swift`)
+- Dead code: `IndexParser`, `resolveMenuPath`, `clickMenu`, `MenuBar.click`
+- Unused `--async` CLI flag, dead `#if swift` and `#available` guards
+- Duplicate `AXUIElementCreateApplication` call, `halfWidthSpace` variable
+- Scaffold test that asserted `"Hello, world!\n"`
+
+### Breaking Changes
+- **Search keyword**: default changed from `mu` to `m` — update your muscle memory or reconfigure in Alfred
+- **macOS 12 minimum**: drops support for macOS 10.15–11 (Alfred 5 already requires 12+)
+- **Settings file format**: `settings.txt` now uses JSON instead of protobuf text format — existing settings files must be converted
+- **Cache format**: switched from protobuf binary to JSON — cached data will be rebuilt automatically on first run
+- **`--async` flag removed**: no longer accepted as a CLI argument
 
 ## [1.3.1] – 2025-05-13
 
@@ -86,7 +132,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
-[Unreleased]: https://github.com/philocalyst/Menu-Bar-Search/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/lamchau/Menu-Bar-Search/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/lamchau/Menu-Bar-Search/compare/v1.3.1...v3.0.0
 [1.3.1]: https://github.com/philocalyst/Menu-Bar-Search/compare/v1.2.2...v1.3.1
 [1.3.0]: https://github.com/philocalyst/Menu-Bar-Search/compare/v1.2.2...v1.3.0  
 [1.2.2]:    https://github.com/philocalyst/Menu-Bar-Search/compare/v1.2.1...v1.2.2  
