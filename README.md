@@ -1,54 +1,53 @@
-# <img src='assets/icon.png' width='35' align='center' alt='icon'> Menu Bar Search - An Alfred Workflow
+# Menu Bar Search Alfred Workflow
 
-Quickly search through menu options of the front-most application. [↓ Download](https://github.com/BenziAhamed/Menu-Bar-Search/releases/latest/download/Menu.Bar.Search.alfredworkflow)
+Search and action macOS app menu-bar items via Alfred
 
-<span>
-  <img src='assets/finder.png' width='33%' alt='finder'> 
-  <img src='assets/photos.png' width='33%' alt='photos'> 
-  <img src='assets/music.png' width='33%' alt='music'>
-  <img src='assets/search.png' width='33%' alt='search' align='top'>
-</span>
+## Setup
 
+- Enable “Accessibility” for Alfred in  
+  **System Preferences → Security & Privacy → Privacy → Accessibility**.  
+- Open the workflow’s Configuration (⌘+, on the workflow) to customize:
+  - **Maximum items per menu**  
+  - **Maximum sub-menu depth**  
+  - **Show disabled menu items**  
+  - **Include Apple  menu items**  
+  - **Refresh cache on every new search**  
+- For per-app overrides, type `ms` in Alfred to open the **Settings** folder, then edit `settings.txt` according to the sample.
 
 ## Usage
 
-- Type `m` in Alfred to list menu bar items for front most application.
-- You can filter menu items by name, or do a fuzzy search.
-- Alternatively, set a hotkey to trigger the workflow as well.
+### Search Menu Items (`mu`)
 
-E.g
+Type `mu` followed by your query to list menu-bar items of the frontmost application.  
+Supports fuzzy matching or exact prefixes.
 
-- `m new tab` will match the menu item **New Tab**
-- `m cw` will match the menu item **Close Window**
+![Example Search](assets/search.png)
 
+Example: `mu cw` will match **Close Window** via fuzzy search
 
-## Change log
+* <kbd>↩</kbd> Click the selected menu item
 
-- 1.0 - Initial Release
-- 1.1 - Added Fuzzy Text Matching for Menus
-- 1.1.1 - Changed run behaviour to terminate previous script, this makes the experience slightly more faster
-- 1.2 - Completely native menu clicking, removed reliance on AppleScript
-  - 1.2.1 - Performance improvements when generating menus using direct JSON encoding
-  - 1.2.2 - More performance improvements while filtering menu items
-- 1.3 - Added `-async` flag to allow threaded scanning and populating of menus
-- 1.4 - Added `-cache` setting to enable menu result caching and also set a timeout for cache invalidation
-  - 1.4.1 - Invalidate cache (if present) after actioning a menu press
-  - 1.4.2 - Slide the cache invalidation window forward in case we get invalidated by a near miss
-  - 1.4.3 - Speed improvements to caching, text search and fuzzy matching
-  - 1.4.4 - Added `-no-apple-menu` flag that will skip the apple menu items
-  - 1.4.5 - Tuned fuzzy matcher, allows non-continuous anchor token search
-- 1.5 - Faster caching using protocol buffers
-  - 1.5.1 - Reduced file creation for cache storage
-  - 1.5.2 - Better support for command line apps that create menu bar owning applications
-  - 1.5.3 - Protocol buffer everything - microscopic speed improvements, but hey...
-  - 1.5.4 - Added various environment variables to fine tune menu listings
-  - 1.5.5 - Tweaked ranking of search results for better menu listings
-- 1.6 - Added per app customization via Settings.txt configuration file
-- 1.7 - Universal build for M1 and Intel
-- 1.8 - Fixed the universal build
-- 1.9 - changed to user configuration, and signed executable (exported using Alfred 5)
-- 2.0 - Alfred workflow gallery support! With added shortcut search, brand new configuration settings, tweaks to caching behaviour, brand new icons
+### Browse Folders (`ms`)
 
-## Credits
+Type `ms` to open your workflow’s **Settings** and **Cache** folders:
 
-- Based on the ctwise's ObjC implementation of [Menu Bar Search](https://www.alfredforum.com/topic/1993-menu-search/), which I've ported over to Swift and added caching and per app configuration to speed things up.
+![Alfred show folders](assets/ms.png)
+
+* <kbd>↩</kbd> Open folder
+
+## Caching
+
+On first run the workflow builds a cache of menu items (this may take a few seconds).  
+Subsequent searches are instantaneous. Control cache behavior in the Workflow Configuration or via your per-app `settings.txt`.
+
+## Troubleshooting
+
+If you see  
+> Assistive applications are not enabled in System Preferences  
+  
+ensure Alfred is granted Accessibility in System Preferences → Security & Privacy → Privacy → Accessibility.
+
+## Contribute & Support
+
+Report bugs, request features or contribute on GitHub:  
+https://github.com/philocalyst/Menu-Bar-Search
