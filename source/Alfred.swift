@@ -1,56 +1,54 @@
-//
-//  Alfred.swift
-//  Menu
-//
-//  Created by Benzi on 23/04/17.
-//  Copyright © 2017 Benzi Ahamed. All rights reserved.
-//
-
 import Foundation
 
-class Alfred {
-  static func preparePaths() {
+public class Alfred {
+  public static func preparePaths() {
     let fm = FileManager.default
     try? fm.createDirectory(atPath: data(), withIntermediateDirectories: false, attributes: nil)
     try? fm.createDirectory(
       atPath: cache(), withIntermediateDirectories: false, attributes: nil)
   }
 
-  static func data(path: String? = nil) -> String {
+  public static func data(path: String? = nil) -> String {
     return folder(type: "data", path: path)
   }
 
-  static func cache(path: String? = nil) -> String {
+  public static func cache(path: String? = nil) -> String {
     return folder(type: "cache", path: path)
   }
 
-  static func folder(type: String, path: String? = nil) -> String {
-    let base = ProcessInfo().environment["alfred_workflow_\(type)"] ?? "."
+  public static func folder(type: String, path: String? = nil) -> String {
+    let base = ProcessInfo.processInfo.environment["alfred_workflow_\(type)"] ?? "."
     guard let path = path else { return base }
     return "\(base)/\(path)"
   }
 
-  static func env(_ name: String) -> String? {
-    return ProcessInfo().environment[name]
+  public static func env(_ name: String) -> String? {
+    return ProcessInfo.processInfo.environment[name]
   }
 
-  var results = AlfredResultList()
+  public var results = AlfredResultList()
 
-  func add(_ item: AlfredResultItem) {
+  public init() {}
+
+  public func add(_ item: AlfredResultItem) {
     results.items.append(item)
   }
 
-  var resultsJson: String {
-    return (try? results.jsonString()) ?? "{\"items\":[]}"
+  public var resultsJson: String {
+    let encoder = JSONEncoder()
+    guard let data = try? encoder.encode(results) else {
+      return "{\"items\":[]}"
+    }
+    return String(data: data, encoding: .utf8) ?? "{\"items\":[]}"
   }
 
-  static func quit(_ title: String, subtitle: String? = nil, icon: String? = nil) -> Never {
+  public static func quit(_ title: String, subtitle: String? = nil, icon: String? = nil) -> Never {
     let a = Alfred()
     a.add(
       .with {
         $0.title = title
         $0.subtitle = subtitle ?? ""
-        $0.icon = AlfredResultItemIcon.with { $0.path = icon ?? "icon.png" }
+        $0.icon = AlfredResultItemIcon(type: "", path: icon ?? "icon.png")
       })
     print(a.resultsJson)
     exit(0)

@@ -3,12 +3,8 @@ import PackageDescription
 
 let package = Package(
   name: "menu",
-  platforms: [.macOS(.v10_15)],
+  platforms: [.macOS(.v12)],
   dependencies: [
-    .package(
-      url: "https://github.com/apple/swift-protobuf.git",
-      from: "1.29.0"
-    ),
     .package(
       url: "https://github.com/apple/swift-argument-parser.git",
       from: "1.5.0"
@@ -17,16 +13,23 @@ let package = Package(
       url: "https://github.com/krisk/fuse-swift.git",
       from: "1.4.0"
     ),
-
   ],
   targets: [
+    .target(
+      name: "MenuBarLib",
+      dependencies: [
+        .product(name: "Fuse", package: "fuse-swift"),
+      ],
+      path: "source",
+      exclude: ["CLI.swift"]
+    ),
     .executableTarget(
       name: "menu",
       dependencies: [
-        .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+        "MenuBarLib",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
-        .product(name: "Fuse", package: "fuse-swift"),
       ],
+      path: "cli",
       linkerSettings: [
         .unsafeFlags([
           "-Xlinker", "-sectcreate",
@@ -36,10 +39,10 @@ let package = Package(
         ])
       ]
     ),
-
     .testTarget(
-      name: "menuTests",
-      dependencies: ["menu"]
+      name: "MenuBarTests",
+      dependencies: ["MenuBarLib"],
+      path: "Tests"
     ),
   ]
 )

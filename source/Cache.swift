@@ -1,20 +1,16 @@
-//
-//  Cache.swift
-//  Menu
-//
-//  Created by Benzi on 23/04/17.
-//  Copyright © 2017 Benzi Ahamed. All rights reserved.
-//
-
 import Foundation
-import SwiftProtobuf
 
-struct CacheControl: CustomStringConvertible {
-  let appBundleId: String
-  let control: MenuItemCache
+public struct CacheControl: CustomStringConvertible {
+  public let appBundleId: String
+  public let control: MenuItemCache
 
-  var description: String {
+  public var description: String {
     return "app:\(appBundleId) created:\(control.created) timeout:\(control.timeout)"
+  }
+
+  public init(appBundleId: String, control: MenuItemCache) {
+    self.appBundleId = appBundleId
+    self.control = control
   }
 }
 
@@ -23,8 +19,7 @@ enum CacheType: String {
   case menus
 }
 
-// cache
-enum Cache {
+public enum Cache {
   static func getURL(_ app: String, _ type: CacheType) -> URL {
     let base =
       app
@@ -33,62 +28,54 @@ enum Cache {
     return URL(fileURLWithPath: Alfred.cache(path: "\(base).\(type.rawValue)"))
   }
 
-  static func save(app: String, items: [MenuItem], lifetime: Double) {
+  public static func save(app: String, items: [MenuItem], lifetime: Double) {
     var control = MenuItemCache()
     control.created = Date().timeIntervalSince1970
     control.timeout = control.created + lifetime
-    var list = MenuItemList()
-    list.items = items
+    let list = MenuItemList(items: items)
     save(control, getURL(app, .cache))
     save(list, getURL(app, .menus))
   }
 
-  static func save(_ message: Message, _ url: URL) {
-    guard let d = try? message.serializedData() else { return }
+  static func save<T: Encodable>(_ value: T, _ url: URL) {
+    guard let data = try? JSONEncoder().encode(value) else { return }
     do {
-      try d.write(to: url)
+      try data.write(to: url)
     } catch {}
   }
 
-  static func load(app: String, settingsModifiedInterval: Double? = nil) -> [MenuItem]? {
+  public static func load(app: String, settingsModifiedInterval: Double? = nil) -> [MenuItem]? {
     let controlURL = getURL(app, .cache)
     guard let controlData = try? Data(contentsOf: controlURL),
-      let control = try? MenuItemCache(serializedBytes: controlData)
+      var control = try? JSONDecoder().decode(MenuItemCache.self, from: controlData)
     else { return nil }
 
-    // settings was updated since we last created the cache
     if let interval = settingsModifiedInterval, control.created <= interval {
       return nil
     }
 
     let dt = Date().timeIntervalSince1970 - control.timeout
     if dt >= 1 {
-      // too stale data, invalidate for sure
       return nil
     }
 
     let url = getURL(app, .menus)
-    guard let d = try? Data(contentsOf: url),
-      let list = try? MenuItemList(serializedBytes: d)
+    guard let data = try? Data(contentsOf: url),
+      let list = try? JSONDecoder().decode(MenuItemList.self, from: data)
     else { return nil }
 
-    // if we timedout within 1 second
-    // slide the timeout window forward
-    // this allows us to reuse the cache if we are close
-    if dt < 1 {
-      var control = control
-      control.timeout += 3
-      save(control, controlURL)
-    }
+    // slide the timeout window forward on each access
+    control.timeout += 3
+    save(control, controlURL)
 
     return list.items
   }
 
-  static func invalidate(app: String) {
+  public static func invalidate(app: String) {
     try? FileManager.default.removeItem(at: getURL(app, .cache))
   }
 
-  static func getCachedMenuControls() -> [CacheControl] {
+  public static func getCachedMenuControls() -> [CacheControl] {
     var controls = [CacheControl]()
     let fm = FileManager.default
     let cachePath = Alfred.cache()
@@ -100,8 +87,7 @@ enum Cache {
       guard let controlData = try? Data(contentsOf: getURL(bundleID, .cache)) else {
         continue
       }
-      guard let control = try? MenuItemCache(serializedBytes: controlData)
-      else {
+      guard let control = try? JSONDecoder().decode(MenuItemCache.self, from: controlData) else {
         continue
       }
       controls.append(

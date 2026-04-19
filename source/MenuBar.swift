@@ -8,28 +8,21 @@
 import Cocoa
 import Foundation
 
-class MenuBar {
-  var menuBar: AXUIElement?
-  let initState: AXError
+public class MenuBar {
+  public var menuBar: AXUIElement?
+  public let initState: AXError
 
-  init(for app: NSRunningApplication) {
+  public init(for app: NSRunningApplication) {
     let axApp = AXUIElementCreateApplication(app.processIdentifier)
     var menuBarValue: CFTypeRef?
     self.initState = AXUIElementCopyAttributeValue(
       axApp, kAXMenuBarAttribute as CFString, &menuBarValue)
-    if self.initState == .success {
-      self.menuBar = (menuBarValue as! AXUIElement)
+    if self.initState == .success, let value = menuBarValue {
+      self.menuBar = unsafeDowncast(value as AnyObject, to: AXUIElement.self)
     }
   }
 
-  func click(pathIndices: [Int]) {
-    guard let menuBar = self.menuBar else {
-      return
-    }
-    clickMenu(menu: menuBar, pathIndices: pathIndices, currentIndex: 0)
-  }
-
-  func load(_ options: MenuGetterOptions) async -> [MenuItem] {
+  public func load(_ options: MenuGetterOptions) async -> [MenuItem] {
     guard let menuBar = self.menuBar else {
       return []
     }

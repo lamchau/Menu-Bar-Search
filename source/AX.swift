@@ -9,14 +9,10 @@
 import ApplicationServices
 import Foundation
 
-#if swift(>=5.5) && canImport(_Concurrency)
-  // SAFETY: A promise, from us to the compiler, to never mututate from mulitple threads.
-  extension AXUIElement: @retroactive @unchecked Sendable {}
+// AXUIElement is a thread-safe CFType proxy to the accessibility server
+extension AXUIElement: @retroactive @unchecked Sendable {}
 
-  extension MenuGetterOptions: @unchecked Sendable {}
-#endif
-
-let virtualKeys = [
+public let virtualKeys = [
   0x24: "↩",  // kVK_Return
   0x4c: "⌤",  // kVK_ANSI_KeypadEnter
   0x47: "⌧",  // kVK_ANSI_KeypadClear
@@ -57,20 +53,18 @@ let virtualKeys = [
   0x7e: "▲",  // kVK_UpArrow
 ]
 
-// let halfWidthSpace = " " // "🌐"
-let halfWidthSpace = ""
 
-func decode(modifiers: Int) -> String {
+public func decode(modifiers: Int) -> String {
   if modifiers == 0x18 { return "fn" }
   var result = [String]()
   if (modifiers & 0x04) > 0 { result.append("⌃") }
   if (modifiers & 0x02) > 0 { result.append("⌥") }
   if (modifiers & 0x01) > 0 { result.append("⇧") }
   if (modifiers & 0x08) == 0 { result.append("⌘") }
-  return result.joined(separator: halfWidthSpace)
+  return result.joined()
 }
 
-func getShortcut(_ cmd: String?, _ modifiers: Int, _ virtualKey: Int) -> String {
+public func getShortcut(_ cmd: String?, _ modifiers: Int, _ virtualKey: Int) -> String {
   var shortcut: String? = cmd
   if let s = shortcut {
     if s.unicodeScalars[s.unicodeScalars.startIndex].value == 0x7f {
@@ -83,35 +77,98 @@ func getShortcut(_ cmd: String?, _ modifiers: Int, _ virtualKey: Int) -> String 
   }
   let mods = decode(modifiers: modifiers)
   if let s = shortcut {
-    shortcut = mods + halfWidthSpace + s
+    shortcut = mods + s
   }
   return shortcut ?? ""
 }
 
-func getAttribute(element: AXUIElement, name: String) -> CFTypeRef? {
+public func getAttribute(element: AXUIElement, name: String) -> CFTypeRef? {
   var value: CFTypeRef?
   AXUIElementCopyAttributeValue(element, name as CFString, &value)
   return value
 }
 
-func clickMenu(menu element: AXUIElement, pathIndices: [Int], currentIndex: Int) {
-  guard
-    let menuBarItems = getAttribute(element: element, name: kAXChildrenAttribute)
-      as? [AXUIElement], menuBarItems.count > 0
-  else { return }
-  let itemIndex = pathIndices[currentIndex]
-  guard itemIndex >= menuBarItems.startIndex, itemIndex < menuBarItems.endIndex else { return }
-  let child = menuBarItems[itemIndex]
-  if currentIndex == pathIndices.count - 1 {
-    AXUIElementPerformAction(child, kAXPressAction as CFString)
-    return
-  }
-  guard let menuBar = getAttribute(element: child, name: kAXChildrenAttribute) as? [AXUIElement]
-  else { return }
-  clickMenu(menu: menuBar[0], pathIndices: pathIndices, currentIndex: currentIndex + 1)
+/// resolves path indices to menu item names by walking the AX tree
+/// escapes a string for safe interpolation into AppleScript
+public func escapeAppleScript(_ s: String) -> String {
+  s.replacingOccurrences(of: "\\", with: "\\\\")
+    .replacingOccurrences(of: "\"", with: "\\\"")
 }
 
-func getMenuItems(
+/// sends a keyboard shortcut via System Events
+/// shortcut format: modifier symbols followed by key, e.g. "⇧⌘N", "⌘,", "⌃⌥⌘F"
+public func sendShortcutViaSystemEvents(appName: String, shortcut: String) -> Bool {
+  guard !shortcut.isEmpty else { return false }
+  var modifiers = [String]()
+  var key = ""
+  for char in shortcut {
+    switch char {
+    case "⌘": modifiers.append("command down")
+    case "⇧": modifiers.append("shift down")
+    case "⌥": modifiers.append("option down")
+    case "⌃": modifiers.append("control down")
+    default: key += String(char)
+    }
+  }
+  guard !key.isEmpty, !modifiers.isEmpty else { return false }
+  // skip non-character keys (F1, arrows, etc.)
+  let specialKeys = ["↩", "⌤", "⌧", "⇥", "␣", "⌫", "⎋", "⇪", "fn",
+    "↖", "⇞", "⌦", "↘", "⇟", "◀︎", "▶︎", "▼", "▲"]
+  if key.hasPrefix("F") && key.count <= 3 { return false }
+  if specialKeys.contains(key) { return false }
+
+  let modStr = modifiers.joined(separator: ", ")
+  let script = """
+    tell application "System Events"
+      tell process "\(escapeAppleScript(appName))"
+        keystroke "\(escapeAppleScript(key.lowercased()))" using {\(modStr)}
+      end tell
+    end tell
+    """
+  let process = Process()
+  process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+  process.arguments = ["-e", script]
+  try? process.run()
+  process.waitUntilExit()
+  return process.terminationStatus == 0
+}
+
+public func clickMenuViaSystemEvents(appName: String, menuPath: [String]) {
+  guard menuPath.count >= 2 else { return }
+
+  // use osascript subprocess instead of NSAppleScript
+  // NSAppleScript has sandboxing/timing issues in some contexts
+  var tells = [String]()
+  var ends = [String]()
+
+  tells.append("tell application \"System Events\"")
+  tells.append("  tell process \"\(escapeAppleScript(appName))\"")
+  tells.append("    tell menu bar item \"\(escapeAppleScript(menuPath[0]))\" of menu bar 1")
+  tells.append("      perform action \"AXPress\"")
+  tells.append("      delay 0.15")
+  ends.append("    end tell")
+
+  for i in 1..<(menuPath.count - 1) {
+    tells.append("      tell menu item \"\(escapeAppleScript(menuPath[i]))\" of menu 1")
+    tells.append("        perform action \"AXPress\"")
+    tells.append("        delay 0.15")
+    ends.append("      end tell")
+  }
+
+  let lastItem = escapeAppleScript(menuPath[menuPath.count - 1])
+  tells.append("      perform action \"AXPress\" of menu item \"\(lastItem)\" of menu 1")
+  ends.append("  end tell")
+  ends.append("end tell")
+
+  let script = (tells + ends.reversed()).joined(separator: "\n")
+  let process = Process()
+  process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+  process.arguments = ["-e", script]
+  try? process.run()
+  process.waitUntilExit()
+}
+
+public func getMenuItems(
   forElement element: AXUIElement,
   menuItems: inout [MenuItem],
   path: [String] = [],
@@ -180,10 +237,10 @@ func getMenuItems(
       var modifiers = 0
       var virtualKey = 0
       if let m = getAttribute(element: child, name: kAXMenuItemCmdModifiersAttribute) {
-        CFNumberGetValue((m as! CFNumber), CFNumberType.longType, &modifiers)
+        CFNumberGetValue(unsafeDowncast(m as AnyObject, to: CFNumber.self), CFNumberType.longType, &modifiers)
       }
       if let v = getAttribute(element: child, name: kAXMenuItemCmdVirtualKeyAttribute) {
-        CFNumberGetValue((v as! CFNumber), CFNumberType.longType, &virtualKey)
+        CFNumberGetValue(unsafeDowncast(v as AnyObject, to: CFNumber.self), CFNumberType.longType, &virtualKey)
       }
 
       var menuItem = MenuItem()
@@ -203,7 +260,7 @@ func getMenuItems(
   }
 }
 
-func dumpInfo(element: AXUIElement, name: String, depth: Int) {
+public func dumpInfo(element: AXUIElement, name: String, depth: Int) {
   let padding = " " + String(repeating: " |", count: depth - 1)
   print(padding, ":::", name, ":::")
   print(padding, "   ", element)
@@ -397,17 +454,18 @@ func dumpInfo(element: AXUIElement, name: String, depth: Int) {
     ])
 }
 
-struct MenuGetterOptions {
-  var maxDepth = 10
-  var maxChildren = 20
-  var specificMenuRoot: String?
-  var dumpInfo = false
-  var appFilter = AppFilter()
-  var recache = false
-  init() {}
+public struct MenuGetterOptions: Sendable {
+  public var maxDepth = 10
+  public var maxChildren = 20
+  public var specificMenuRoot: String?
+  public var dumpInfo = false
+  public var appFilter = AppFilter()
+  public var recache = false
 
-  func canIgnorePath(path: [String]) -> Bool {
-    if appFilter.ignoreMenuPaths.firstIndex(where: { $0.path == path }) != nil {
+  public init() {}
+
+  public func canIgnorePath(path: [String]) -> Bool {
+    if appFilter.ignoreMenuPaths.contains(where: { $0.path == path }) {
       // print("ignoring \(path)")
       return true
     }
@@ -416,13 +474,15 @@ struct MenuGetterOptions {
   }
 }
 
-actor MenuGetter {
+public actor MenuGetter {
+  public init() {}
+
   /// Walks the menu bar *concurrently*, yet safely aggregates into a single array.
-  func load(
+  public func load(
     menuBar: AXUIElement,
     options: MenuGetterOptions
   ) async -> [MenuItem] {
-    // grab the top‐level bar entries
+    // grab the top-level bar entries
     guard
       let bars = getAttribute(element: menuBar, name: kAXChildrenAttribute)
         as? [AXUIElement], !bars.isEmpty
@@ -473,7 +533,7 @@ actor MenuGetter {
       }
 
       var all = [MenuItem]()
-      all.reserveCapacity(10)  // Estimating this is the average number of menu bar elements
+      all.reserveCapacity(100)
       for await chunk in group {
         all.append(contentsOf: chunk)
       }

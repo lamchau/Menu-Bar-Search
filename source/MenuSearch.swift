@@ -6,11 +6,11 @@
 
 import Cocoa
 import Foundation
-import SwiftProtobuf
 
 @MainActor
-struct MenuSearch {
-  static func run(with args: RuntimeArgs) async {
+public struct MenuSearch {
+  public static func run(with initialArgs: RuntimeArgs) async {
+    var args = initialArgs
     // Prepare Alfred workflow directories
     Alfred.preparePaths()
 
@@ -33,8 +33,7 @@ struct MenuSearch {
     let appBundleId = app.bundleIdentifier ?? "no-id"
     let appDisplayName = "\(appLocalizedName) (\(appBundleId))"
 
-    // Create AXUI element & menu bar accessor
-    _ = AXUIElementCreateApplication(app.processIdentifier)
+    // Create menu bar accessor
     let menuBar = MenuBar(for: app)
     switch menuBar.initState {
     case .success:
@@ -54,8 +53,15 @@ struct MenuSearch {
     }
 
     // Handle a click request and exit
-    if let clickIndices = args.clickIndices, !clickIndices.isEmpty {
-      menuBar.click(pathIndices: clickIndices)
+    if !args.menuPath.isEmpty {
+      MenuClickDispatcher.click(
+        app: app,
+        appName: appLocalizedName,
+        shortcut: args.shortcut,
+        menuPath: args.menuPath,
+        pathIndices: args.pathIndices,
+        menuBar: menuBar.menuBar
+      )
       Cache.invalidate(app: appBundleId)
       exit(0)
     }
@@ -76,7 +82,8 @@ struct MenuSearch {
       {
         settingsModifiedInterval = mod.timeIntervalSince1970
         do {
-          let settings = try Settings(textFormatString: text)
+          let settingsData = Data(text.utf8)
+          let settings = try JSONDecoder().decode(Settings.self, from: settingsData)
           if let idx = settings.appFilters.firstIndex(
             where: { $0.app == appBundleId })
           {
@@ -95,7 +102,7 @@ struct MenuSearch {
               args.cachingEnabled = false
             }
           }
-        } catch let e as TextFormatDecodingError {
+        } catch let e as DecodingError {
           Alfred.quit("\(e)", subtitle: "Settings Error")
         } catch {
           Alfred.quit("Invalid settings file", subtitle: settingsPath)
@@ -108,6 +115,7 @@ struct MenuSearch {
     // Load or compute the menu items
     let menuItems: [MenuItem]
     let a = Alfred()
+    let pidStr = "\(app.processIdentifier)"
     if args.cachingEnabled,
       let cached = Cache.load(
         app: appBundleId,
@@ -124,7 +132,7 @@ struct MenuSearch {
       }
     }
 
-    // A MainActor‑isolated render function
+    // A MainActor-isolated render function
     @MainActor func render(_ menu: MenuItem) {
       let isApple = menu.appleMenuItem
       a.add(
@@ -138,12 +146,13 @@ struct MenuSearch {
             ? menu.title
             : "\(menu.title) - \(menu.shortcut)"
           $0.subtitle = menu.subtitle
-          $0.arg = menu.arg
-          $0.icon.path = isApple ? "apple-icon.png" : appPath
-          $0.icon.type = isApple ? "" : "fileicon"
+          $0.arg = "\(pidStr):\(menu.shortcut):\(menu.pathIndices):\(menu.path.joined(separator: "→"))"
+          $0.icon = AlfredResultItemIcon(
+            type: isApple ? "" : "fileicon",
+            path: isApple ? "apple-icon.png" : appPath
+          )
         })
     }
-    let r = render  // prevent compiler segfault
 
     // Filter, sort, and render
     if !args.query.isEmpty {
@@ -176,7 +185,7 @@ struct MenuSearch {
         }
         .filter { $0.1.matched }
         .sorted { $0.1.score > $1.1.score }
-        .forEach { r($0.0) }
+        .forEach { render($0.0) }
 
     } else if args.options.appFilter.showAppleMenu,
       args.reorderAppleMenuToLast,
@@ -190,18 +199,18 @@ struct MenuSearch {
           j += 1
         }
         if i > 0 {
-          menuItems[0..<i].forEach { r($0) }
+          menuItems[0..<i].forEach { render($0) }
         }
         if j < end {
-          menuItems[j..<end].forEach { r($0) }
+          menuItems[j..<end].forEach { render($0) }
         }
-        menuItems[i..<j].forEach { r($0) }
+        menuItems[i..<j].forEach { render($0) }
       } else {
-        menuItems.forEach { r($0) }
+        menuItems.forEach { render($0) }
       }
 
     } else {
-      menuItems.forEach { r($0) }
+      menuItems.forEach { render($0) }
     }
 
     // If nothing matched, show a placeholder
@@ -209,7 +218,7 @@ struct MenuSearch {
       a.add(
         AlfredResultItem.with {
           $0.title = "No menu items"
-          $0.icon = .with { $0.path = "icon.error.png" }
+          $0.icon = AlfredResultItemIcon(path: "icon.error.png")
         })
     }
 

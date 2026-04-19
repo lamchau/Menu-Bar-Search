@@ -9,7 +9,7 @@
 import Foundation
 @preconcurrency import Fuse
 
-extension String {
+public extension String {
   /// A shared Fuse instance to avoid re-allocating on every call.
   private static let fuse = Fuse()
 

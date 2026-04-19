@@ -8,7 +8,7 @@
 
 import Foundation
 
-extension MenuItem {
+public extension MenuItem {
   var arg: String {
     return pathIndices
   }
@@ -18,7 +18,7 @@ extension MenuItem {
   }
 
   var appleMenuItem: Bool {
-    return path[0] == "Apple"
+    return path.first == "Apple"
   }
 
   var subtitle: String {
@@ -28,6 +28,6 @@ extension MenuItem {
   }
 
   var title: String {
-    return path.last!
+    return path.last ?? ""
   }
 }
